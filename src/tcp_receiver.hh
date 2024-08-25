@@ -27,4 +27,7 @@ public:
 
 private:
   Reassembler reassembler_;
+  uint32_t current_idx { 0 };
+  Wrap32 ISN { 0 };
+  bool FIN { false };
 };
