@@ -1,13 +1,27 @@
 #pragma once
-
 #include "byte_stream.hh"
+#include <set>
+#include <vector>
+
+const uint64_t MAX_SZIE = 4096;
+
+class PreNode
+{
+public:
+  uint64_t first_index;
+  std::string data;
+  PreNode() : first_index( 0 ), data( "" ) {};
+  PreNode( uint64_t f_index, std::string d ) : first_index( f_index ), data( std::move( d ) ) {};
+
+  bool operator<( const PreNode& a ) const { return first_index < a.first_index; }
+  bool operator==( const PreNode& a ) const { return first_index == a.first_index; }
+};
 
 class Reassembler
 {
 public:
   // Construct Reassembler to write into given ByteStream.
-  explicit Reassembler( ByteStream&& output ) : output_( std::move( output ) ) {}
-
+  explicit Reassembler( ByteStream&& output ) : output_( std::move( output ) ), pre_node_() {}
   /*
    * Insert a new substring to be reassembled into a ByteStream.
    *   `first_index`: the index of the first byte of the substring
@@ -40,6 +54,19 @@ public:
   // Access output stream writer, but const-only (can't write from outside)
   const Writer& writer() const { return output_.writer(); }
 
+  bool overlapping( std::string data, uint64_t idx );
+
+  uint64_t get_first_unassmebled_idx() const { return next_idx; };
+
 private:
   ByteStream output_; // the Reassembler writes to this ByteStream
+  PreNode pre_node_;
+  uint64_t last_idx { 0 };
+  void insert_operation( uint64_t first_index, std::string& data );
+  void insert_next();
+  bool last_is_occurence { false };
+  // std::unordered_map<uint64_t, std::string> pending_data {};
+  // 优先队列缓存数据
+  std::set<PreNode> pending_data {};
+  uint64_t next_idx { 0 };
 };
