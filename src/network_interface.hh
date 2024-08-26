@@ -1,10 +1,10 @@
 #pragma once
 
-#include <queue>
-
 #include "address.hh"
 #include "ethernet_frame.hh"
 #include "ipv4_datagram.hh"
+#include <queue>
+#include <unordered_map>
 
 // A "network interface" that connects IP (the internet layer, or network layer)
 // with Ethernet (the network access layer, or link layer).
@@ -27,6 +27,8 @@
 // the network interface passes it up the stack. If it's an ARP
 // request or reply, the network interface processes the frame
 // and learns or replies as necessary.
+struct EaAndTime;
+
 class NetworkInterface
 {
 public:
@@ -81,4 +83,20 @@ private:
 
   // Datagrams that have been received
   std::queue<InternetDatagram> datagrams_received_ {};
+
+  std::unordered_map<uint32_t, EaAndTime> already_known_address_ {};
+  std::unordered_map<uint32_t, InternetDatagram> cache_data_ {};
+  std::unordered_map<uint32_t, uint64_t> pending_requests_ {};
+  size_t time_since_last_tick_ = 0;
+};
+
+struct EaAndTime
+{
+  EthernetAddress ea;
+  // expiration at this time
+  uint64_t time;
+
+  EaAndTime() : ea(), time( 0 ) {}
+
+  EaAndTime( EthernetAddress ea_, uint64_t time_ ) : ea( ea_ ), time( time_ ) {}
 };
