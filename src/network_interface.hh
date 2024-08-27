@@ -85,7 +85,7 @@ private:
   std::queue<InternetDatagram> datagrams_received_ {};
 
   std::unordered_map<uint32_t, EaAndTime> already_known_address_ {};
-  std::unordered_map<uint32_t, InternetDatagram> cache_data_ {};
+  std::unordered_multimap<uint32_t, EthernetFrame> cache_data_ {};
   std::unordered_map<uint32_t, uint64_t> pending_requests_ {};
   size_t time_since_last_tick_ = 0;
 };

@@ -36,6 +36,15 @@ void NetworkInterface::send_datagram( const InternetDatagram& dgram, const Addre
   // cout << "DEBUG: Sending datagram to " << ip << endl;
   // cout << already_known_address_.find( ip ) == already_known_address_.end() << endl;
   if ( already_known_address_.find( ip ) == already_known_address_.end() ) {
+    EthernetFrame cache_frame = EthernetFrame();
+    EthernetHeader cache_header = EthernetHeader();
+    cache_header.src = ethernet_address_;
+    cache_header.type = EthernetHeader::TYPE_IPv4;
+    cache_frame.header = cache_header;
+    Serializer s;
+    dgram.serialize( s );
+    cache_frame.payload = s.output();
+    cache_data_.emplace( ip, cache_frame );
     if ( pending_requests_.find( ip ) != pending_requests_.end() ) {
       if ( pending_requests_[ip] > static_cast<uint64_t>( time_since_last_tick_ ) ) {
         return;
@@ -43,7 +52,6 @@ void NetworkInterface::send_datagram( const InternetDatagram& dgram, const Addre
       pending_requests_.erase( ip );
     }
     pending_requests_[ip] = static_cast<uint64_t>( time_since_last_tick_ ) + 5000;
-    cache_data_[ip] = dgram;
     ARPMessage arp;
     arp.hardware_type = ARPMessage::TYPE_ETHERNET;
     arp.protocol_type = EthernetHeader::TYPE_IPv4;
@@ -78,11 +86,24 @@ void NetworkInterface::recv_frame( const EthernetFrame& frame )
     if ( !parse( dgram, frame.payload ) ) {
       return;
     }
+    if ( dgram.header.src == ip_address_.ipv4_numeric() ) {
+      return;
+    }
     datagrams_received_.push( dgram );
   } else if ( frame.header.type == EthernetHeader::TYPE_ARP ) {
     ARPMessage arp;
     if ( !parse( arp, frame.payload ) ) {
       return;
+    }
+    EaAndTime eat( arp.sender_ethernet_address, static_cast<uint64_t>( time_since_last_tick_ ) + 30000 );
+    already_known_address_[arp.sender_ip_address] = eat;
+    if ( cache_data_.contains( arp.sender_ip_address ) ) {
+      auto range = cache_data_.equal_range( arp.sender_ip_address );
+      for ( auto i = range.first; i != range.second; i++ ) {
+        i->second.header.dst = arp.sender_ethernet_address;
+        transmit( i->second );
+      }
+      cache_data_.erase( range.first, range.second );
     }
     Serializer serializer;
     if ( arp.opcode == ARPMessage::OPCODE_REQUEST ) {
@@ -104,18 +125,9 @@ void NetworkInterface::recv_frame( const EthernetFrame& frame )
         reply_frame.header.dst = arp.sender_ethernet_address;
         reply_frame.header.type = EthernetHeader::TYPE_ARP;
         reply_frame.payload = serializer.output();
-        EaAndTime eat( arp.sender_ethernet_address, static_cast<uint64_t>( time_since_last_tick_ ) + 30000 );
-        already_known_address_[arp.sender_ip_address] = eat;
         transmit( reply_frame );
       }
-    } else if ( arp.opcode == ARPMessage::OPCODE_REPLY ) {
-      EaAndTime eat( arp.sender_ethernet_address, static_cast<uint64_t>( time_since_last_tick_ ) + 30000 );
-      already_known_address_[arp.sender_ip_address] = eat;
-      if ( cache_data_.find( arp.sender_ip_address ) != cache_data_.end() ) {
-        send_datagram( cache_data_[arp.sender_ip_address], Address::from_ipv4_numeric( arp.sender_ip_address ) );
-        cache_data_.erase( arp.sender_ip_address );
-      }
-    }
+    } 
   }
 }
 
